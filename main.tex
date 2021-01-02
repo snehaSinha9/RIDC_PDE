@@ -1,0 +1,152 @@
+\documentclass{report}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath, amsthm, amssymb}
+\usepackage[
+    backend=biber,
+    style=alphabetic,
+    sorting=ynt]{biblatex}
+\usepackage{csquotes}
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+\addbibresource{proj.bib}
+
+\title{PROJECT TITLE}
+\author{Sneha Sinha, s1708674}
+\date{November 2020}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+RIDC is a pretty good method.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+
+\chapter{Introduction to Numerical Integration}
+
+Differential equations describe the evolution of physical systems, with regards to variables like time and position studied by Leibniz and Newton from as early as the late 1600s. In this paper we give a review of the problem statement- finding the solution to these equations. We will cover the nature of numerical integration of ordinary differential equations and possible improvements. Numerical integration has long thought to be a serial procedure because of the seemingly step-wise algorithms that have been popular, like for example the Forward Euler method. However, serial methods do not utilise fully the resources of common computers with multiple processors as they will run as a single thread through one single processor. We will outline different methods that would even out the load balance among multiple processors without any detrimental effect on accuracy. It is clear to see that parrallelising, increases the time as well as space efficiency.
+
+In the next few sections we will be outlining the theoretical background to methods such as Forward Euler(FE), Runge-Kutta(RK) and Deferred Corrections(DC) which are all methods of approximation to find the solution to the initial value problem, 
+\begin{align}
+    \frac{d}{dt} y(t) &= f(t, y(t)), \ a < t < b \label{eq:ivp}\\
+    y(a) &= y_0, \label{eq:ics}
+\end{align}
+where we define $y_0 \in \mathbb{C}^m$, $y(t): \mathbb{R} \to \mathbb{C}^m$ and $f:\mathbb{R} \times \mathbb{C}^m \to \mathbb{C}^m$. This is assuming that $f$ is a sufficiently smooth such that a unique solution exists as well as its corresponding series expansions for the use in higher order methods \cite{ong-spiteri}. 
+
+\section{Forward Euler and Runge-Kutta methods of order k}
+The Forward Euler(FE) is considered to be one of the simplest ways to discretise the solution. We use the knowledge of the solution at some point $y_t$, the derivative $\frac{d}{dt}y(t)=f(t,y)$ and a chosen step-size $\Delta t$ to approximate the slope between $y_n$ and $y_{n+1}$. Using the fact that for any $n$, $\frac{d}{dt}y(t) = \frac{y_{n+1} - y_n}{\Delta t}$, we can rearrange to give us an explicit formula for the next time point,
+\begin{equation}
+    y_{t+1} = y_t + \Delta t f(t,y_t)
+    \label{eq:euler}
+\end{equation}
+Although this method is simple, FE is known to be numerically unstable especially considering stiff equations. It would require smaller time-steps to acquire accurate results at the cost of running time. 
+
+The Runge-Kutta method, on the other hand, does not directly estimate the slope from one point to another. Instead, the method centres around considering a `trial' midpoint to account for low order error terms,
+\begin{align}
+	k_1 &= \Delta t f(t_n,y_n) \nonumber \\
+    k_2 &= \Delta t f(t_n + \frac{1}{2}\Delta t, y_n + \frac{1}{2}k_1) \nonumber\\
+    k_3 &= \Delta t f(t_n + \frac{1}{2}\Delta t, y_n + \frac{1}{2}k_2) \nonumber \\
+    k_4 &= \Delta t f(t_n + \Delta t, y_n + k_3) \nonumber \\
+    y_{n+1} &= y_n +\frac{1}{6}\Delta t(k_1 + 2k_2 + 2k_3 +k_4) + O(h^5) 
+    \label{eq:rk4}
+\end{align}
+Equation \eqref{eq:rk4} is commonly known to be RK4, aptly named after its order. Clearly, RK4 uses the average of four weighted increments $k_1$ to $k_4$ where $k_1$ is calculated using the Euler method and $k_2$ and $k_3$ are the slopes at the midpoint. Due to its simplicity and robustness it is considered to be a candidate for helper functions for more complex methods of solving such differential equations, especially when using adaptive and varying step-sizes. 
+
+\section{Revisionist Integral Deferred Corrections}
+In his paper, Victor Pereyra, a mathematician who largely contributed to the study of the deferred correction(DC) method in the 1960s, defines DCs as a type of approximation method using `a basic low order method and successive corrections to achieve a higher order of convergence with respect to the integration step' \cite{pereyra1}. An alternative to this would clearly be to use higher-order methods directly, yet using DCs we can enforce results of the stability, convergence and robustness of low-order methods at all time-steps, resulting in a method that is less computationally expensive. Moreover we will see that the technique is intrinsically related to the global error estimation, which inevitably leads to adaptive methods. The specific classes of DCs we will explore in this section are called revisionist integral deferred corrections(RIDC) which has been shown to be a very effective parallel time-integration technique \cite{parra, ongchrist}. 
+
+The RIDC method first involves computing the initial solution- which we will call the prediction- using a lower order scheme like \eqref{eq:euler} or \eqref{eq:rk4} and then multiple iterated corrections. After some initial pre-computation, the predictor and the correctors can be made to run parallel even with uniform step-sizes we can see substantial improvement in computation time \cite{parra}. In our derivation we will be using the derivation written in \cite{ridcbook}.
+
+First we will need to define our $N$ time-steps by
+\begin{equation*}
+    a = t_0^{[l]} < t_1^{[l]} < \dots < t_{N^{[l]}}^{[l]} =b,
+\end{equation*}
+where we denote $l$ to be the correction level and $N^{[l]}$ as the number of time-steps on the correction level $l$. 
+
+We first want to define the piecewise polynomial $\eta^{[l]}(t)$  as the approximate the solution to $y(t)$ that satisfies $\eta^{[l]}(t^{[l]}_n)= \eta^{[l]}_n$ in conjunction with the assumption that $\eta^{[l]}$ has the same order as $\eta^{[l]}(t^{[l]})$. Then the predictor shall be given by the discretisation, 
+\begin{equation*}
+    \eta^{[0]}_{n+1} = \eta^{[0]}_n + (t^{[0]}_{n+1}- t^{[0]}_n) f(t^{[0]}_n, \eta^{[0]}_n)
+    \label{eq:ridc_p_fe}
+\end{equation*}
+where we have used FE, \eqref{eq:euler}, and the initial condition $\eta^{[0]}_0=y(a)=y_0$ from \eqref{eq:ics} for $n=0,\dots, N^{[0]}-1$. Here the prediction level has been given the index 0, so that the first correction done will be indexed at $l=1$. 
+
+The correctors, involve applying a low order solver to the approximation of the error $e(t)$ of $\eta(t)$ which is given to be the difference between the actual and the approximation, $e(t) = y(t) - \eta(t)$. If we differentiate both sides we get that,
+\begin{equation}
+    e'(t) = y'(t) - \eta'(t) = f(t) - \eta'(t)
+    \label{eq:err}
+\end{equation}
+
+Clearly, then, our recurrence relation must be in terms of the approximation and the error, $y(t) = e(t) + \eta(t)$. Hence our recurrence relation must look like
+\begin{equation*}
+    \eta^{[l+1]}(t)= \eta^{[l]}(t) + e^{[l]}(t)
+\end{equation*}
+Defining, 
+\begin{equation}
+    \delta(t) = f(t,\eta(t)) - \eta'(t)
+    \label{eq:defect}
+\end{equation}
+we can write \eqref{eq:err} as 
+\begin{equation}
+    e'(t) =  (e(t) + \eta(t))' + f(t, \eta(t)) = f(t, \eta(t) + e(t)) - f(t, \eta(t)) + \delta(t)
+    \label{eq:err1}
+\end{equation}
+Note that the Fundamental Theorem of Calculus results in,
+\begin{align*}
+    e'(t) - \delta(t) = \Big(e(t) - \int^t_0 \delta(\tau)\ d\tau \Big)'
+\end{align*}
+And hence, using \eqref{eq:err1} and we get that 
+\begin{equation}
+    \Big(e(t) - \int^t_0 \delta(\tau)\ d\tau \Big)' = f(t, \eta(t)+e(t)) - f(t, \eta(t))
+    \label{eq:erreq}
+\end{equation}
+Upon this system we use FE,
+\begin{align*}
+    e^{[l-1]}(t_n^{[l]}) &- e^{[l-1]}(t_{n-1}^{[l]}) - \int^{t^{[l]}_n}_{t^{[l]}_{n-1}} \delta(\tau)\ d\tau = \\
+    &\Delta t^{[l]}_{n} \big[ f(t^{[l]}_{n-1}, \eta^{[l-1]}(t^{[l]}_{n-1})+e^{[l-1]}(t^{[l]}_{n-1})) - f(t^{[l]}_{n-1}, \eta^{[l-1]}(t^{[l]}_{n-1})) \big]
+\end{align*}
+where we define $\Delta t^{[l]}_n = t^{[l]}_n - t^{[l]}_{n-1}$. From this we finally get the discretisation after doing some algebraic manipulation:
+\begin{equation}
+    \eta^{[l]}_{n} = \eta^{[l]}_{n-1} + \int^{t^{[l]}_{n}}_{t^{[l]}_{n-1}} f(\tau, \eta^{[l-1]}(\tau))\ d\tau + \Delta t^{[l]}_n [f(t^{[l]}_{n-1}, \eta^{[l]}_{n-1}) - f(t^{[l]}_{n-1}, \eta^{[l]}_{n-1})].
+    \label{eq: ridc0}
+\end{equation}
+
+Clearly, solving this equation numerically supplies us with corrected approximations built upon our prediction which we denote by $l=0$ using the notation above. However, for the purpose of solving this numerically, we must approximate the integral \ref{eq: ridc0} using an integration matrix. Here we use $m \in \mathbb{R}$ Gauss-Legendre nodes, namely $r_1, \dots, r_m \in [-1,1]$, that are translated to the interval $[a,b]$, the interval we are solving the ODE on, given by formula
+\[s_i = \frac{b-a}{2}\ r_i + \frac{b+a}{2}.\]
+For each time-point in the interval $[a,b]$, $t_1, \dots, t_m$ we define the Lagrange interpolant defined as such,
+\begin{equation}
+    L^m(\phi, t) = \sum^m_{i=1} \prod_{j\not=i} \frac{t-t_j}{t_i -t_j} \phi_i
+\end{equation}
+where $\phi_i$ is the value of a function at the time-point $t_i$.
+\section{Comparison of order of convergence}
+
+
+\printbibliography[title={Bibliography}]
+\end{document}
+
+
+%%%%%
+% https://github.com/sbross856/Parallel-Solvers-for-Time-Integration/blob/master/Multistep.ipynb
+
+% https://link.springer.com/article/10.1007%2Fs10915-010-9452-4
+
+% https://msp.org/camcos/2015/10-1/camcos-v10-n1-p01-s.pdf
+
+% http://vpereyra.com/wp-content/uploads/2019/01/DeferredCorrections2013.pdf
+
+% https://arxiv.org/abs/1901.10682
+
+% http://articles.adsabs.harvard.edu/pdf/1997AJ....114.1260I
+
+% https://ui.adsabs.harvard.edu/abs/1997AJ....114.1260I/abstract
+
+% www.davidketcheson.info/assets/papers/2014_hork.pdf
+
+% http://eprints.maths.manchester.ac.uk/2505/1/dccontrol_IMAJNA.pdf
+
+% https://www.damtp.cam.ac.uk/research/afha/anders/Spectral.pdf
+
+% https://www.damtp.cam.ac.uk/research/afha/people/anders/Deferred10.pdf
